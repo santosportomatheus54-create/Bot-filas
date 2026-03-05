@@ -6,7 +6,9 @@ ActionRowBuilder,
 ButtonBuilder,
 ButtonStyle,
 PermissionsBitField,
-SlashCommandBuilder
+SlashCommandBuilder,
+REST,
+Routes
 } = require("discord.js")
 
 const client = new Client({
@@ -20,17 +22,61 @@ GatewayIntentBits.MessageContent
 const filas = {}
 const jogadoresFila = new Map()
 const carteiras = {}
+
 const valores = [100,50,20,10,5,2,1]
 
-client.once("ready", () =>{
+/* REGISTRAR COMANDOS */
+
+const commands = [
+
+new SlashCommandBuilder()
+.setName("fila")
+.setDescription("Criar filas"),
+
+new SlashCommandBuilder()
+.setName("vencedor")
+.setDescription("Setar vencedor da partida")
+.addUserOption(option =>
+option.setName("player")
+.setDescription("Jogador vencedor")
+.setRequired(true)
+)
+.addIntegerOption(option =>
+option.setName("valor")
+.setDescription("Valor da partida")
+.setRequired(true)
+)
+
+].map(cmd => cmd.toJSON())
+
+const rest = new REST({version:"10"}).setToken(process.env.TOKEN)
+
+client.once("ready", async ()=>{
+
 console.log(`Bot online: ${client.user.tag}`)
+
+try{
+
+await rest.put(
+Routes.applicationCommands(client.user.id),
+{body:commands}
+)
+
+console.log("Comandos registrados")
+
+}catch(err){
+
+console.log(err)
+
+}
+
 })
 
 /* INTERAÇÕES */
 
 client.on("interactionCreate", async interaction =>{
 
-/* COMANDO /FILA */
+/* COMANDOS */
 
 if(interaction.isChatInputCommand()){
 
@@ -66,11 +112,11 @@ new ButtonBuilder()
 
 )
 
-interaction.reply({embeds:[embed],components:[row]})
+return interaction.reply({embeds:[embed],components:[row]})
 
 }
 
-/* SETAR VENCEDOR */
+/* VENCEDOR */
 
 if(interaction.commandName === "vencedor"){
 
@@ -84,7 +130,8 @@ if(!carteiras[user.id]) carteiras[user.id] = 0
 
 carteiras[user.id] += valor
 
-interaction.reply(`🏆 ${user} recebeu **${valor}** moedas`)
+interaction.reply(`🏆 ${user} ganhou **${valor} moedas**`)
+
 }
 
 }
@@ -101,7 +148,7 @@ if(interaction.customId.startsWith("modo_")){
 
 const modo = interaction.customId.split("_")[1]
 
-interaction.reply(`Modo escolhido: **${modo}**`)
+await interaction.reply(`Modo escolhido: **${modo}**`)
 
 let delay = 0
 
@@ -113,7 +160,7 @@ criarFila(interaction.channel,valor,modo)
 
 },delay)
 
-delay += 2000
+delay += 3000
 
 }
 
@@ -166,7 +213,7 @@ if(interaction.customId === "assumir_partida"){
 if(!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator))
 return interaction.reply({content:"Apenas ADM pode assumir",ephemeral:true})
 
-interaction.reply("✅ Partida assumida pelo ADM")
+interaction.reply("✅ Partida assumida")
 
 }
 
@@ -216,7 +263,7 @@ channel.send({embeds:[embed],components:[row]})
 
 }
 
-/* CRIAR SALA DA PARTIDA */
+/* CRIAR SALA */
 
 async function criarSala(guild,id){
 
@@ -238,8 +285,8 @@ allow:["ViewChannel"]
 })
 
 const embed = new EmbedBuilder()
-.setTitle("⚔️ Partida criada")
-.setDescription("Aguardando um ADM assumir a partida")
+.setTitle("⚔️ PARTIDA CRIADA")
+.setDescription("ADM precisa assumir a partida")
 .setColor("Red")
 
 const row = new ActionRowBuilder()
@@ -256,9 +303,9 @@ canal.send({embeds:[embed],components:[row]})
 
 }
 
-/* COMANDO SACAR */
+/* SACAR */
 
-client.on("messageCreate", message =>{
+client.on("messageCreate", message=>{
 
 if(message.content === "!sacar"){
 
@@ -266,7 +313,7 @@ const saldo = carteiras[message.author.id] || 0
 
 const embed = new EmbedBuilder()
 .setTitle("💰 Carteira")
-.setDescription(`Seu saldo: **${saldo} moedas**`)
+.setDescription(`Saldo: **${saldo} moedas**`)
 .setColor("Yellow")
 
 message.reply({embeds:[embed]})
