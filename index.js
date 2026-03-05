@@ -25,20 +25,31 @@ const carteiras = {}
 
 const valores = [100,50,20,10,5,2,1]
 
-/* REGISTRAR COMANDOS */
+/* COMANDOS */
 
 const commands = [
 
 new SlashCommandBuilder()
-.setName("fila")
-.setDescription("Criar filas"),
+.setName("filas")
+.setDescription("Criar filas")
+.addStringOption(option =>
+option.setName("modo")
+.setDescription("Escolha o modo")
+.setRequired(true)
+.addChoices(
+{name:"1v1",value:"1v1"},
+{name:"2v2",value:"2v2"},
+{name:"3v3",value:"3v3"},
+{name:"4v4",value:"4v4"}
+)
+),
 
 new SlashCommandBuilder()
 .setName("vencedor")
-.setDescription("Setar vencedor da partida")
+.setDescription("Setar vencedor")
 .addUserOption(option =>
 option.setName("player")
-.setDescription("Jogador vencedor")
+.setDescription("Vencedor")
 .setRequired(true)
 )
 .addIntegerOption(option =>
@@ -49,70 +60,50 @@ option.setName("valor")
 
 ].map(cmd => cmd.toJSON())
 
+/* REGISTRAR */
+
 const rest = new REST({version:"10"}).setToken(process.env.TOKEN)
 
 client.once("ready", async ()=>{
 
-console.log(`Bot online: ${client.user.tag}`)
-
-try{
+console.log(`Online: ${client.user.tag}`)
 
 await rest.put(
 Routes.applicationCommands(client.user.id),
 {body:commands}
 )
 
-console.log("Comandos registrados")
-
-}catch(err){
-
-console.log(err)
-
-}
-
 })
 
 /* INTERAÇÕES */
 
-client.on("interactionCreate", async interaction =>{
+client.on("interactionCreate", async interaction=>{
 
-/* COMANDOS */
+if(!interaction.isChatInputCommand() && !interaction.isButton()) return
+
+/* COMANDO FILAS */
 
 if(interaction.isChatInputCommand()){
 
-if(interaction.commandName === "fila"){
+if(interaction.commandName === "filas"){
 
-const embed = new EmbedBuilder()
-.setTitle("🎮 Escolha o modo")
-.setDescription("Selecione o modo da partida")
-.setColor("Blue")
+const modo = interaction.options.getString("modo")
 
-const row = new ActionRowBuilder()
-.addComponents(
+await interaction.reply(`🎮 Criando filas **${modo}**`)
 
-new ButtonBuilder()
-.setCustomId("modo_1v1")
-.setLabel("1v1")
-.setStyle(ButtonStyle.Primary),
+let delay = 0
 
-new ButtonBuilder()
-.setCustomId("modo_2v2")
-.setLabel("2v2")
-.setStyle(ButtonStyle.Primary),
+for(const valor of valores){
 
-new ButtonBuilder()
-.setCustomId("modo_3v3")
-.setLabel("3v3")
-.setStyle(ButtonStyle.Primary),
+setTimeout(()=>{
 
-new ButtonBuilder()
-.setCustomId("modo_4v4")
-.setLabel("4v4")
-.setStyle(ButtonStyle.Primary)
+criarFila(interaction.channel,valor,modo)
 
-)
+},delay)
 
-return interaction.reply({embeds:[embed],components:[row]})
+delay += 2000
+
+}
 
 }
 
@@ -142,36 +133,10 @@ if(interaction.isButton()){
 
 const user = interaction.user
 
-/* ESCOLHER MODO */
-
-if(interaction.customId.startsWith("modo_")){
-
-const modo = interaction.customId.split("_")[1]
-
-await interaction.reply(`Modo escolhido: **${modo}**`)
-
-let delay = 0
-
-for(const valor of valores){
-
-setTimeout(()=>{
-
-criarFila(interaction.channel,valor,modo)
-
-},delay)
-
-delay += 3000
-
-}
-
-}
-
-/* ENTRAR FILA */
-
 if(interaction.customId.startsWith("entrar")){
 
 if(jogadoresFila.has(user.id))
-return interaction.reply({content:"Você já está em uma fila",ephemeral:true})
+return interaction.reply({content:"Você já está em fila",ephemeral:true})
 
 const id = interaction.customId.split("_")[1]
 
@@ -189,8 +154,6 @@ criarSala(interaction.guild,id)
 
 }
 
-/* SAIR FILA */
-
 if(interaction.customId.startsWith("sair")){
 
 if(!jogadoresFila.has(user.id))
@@ -206,12 +169,10 @@ interaction.reply({content:"Saiu da fila",ephemeral:true})
 
 }
 
-/* ASSUMIR PARTIDA */
-
-if(interaction.customId === "assumir_partida"){
+if(interaction.customId === "assumir"){
 
 if(!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator))
-return interaction.reply({content:"Apenas ADM pode assumir",ephemeral:true})
+return interaction.reply({content:"Apenas ADM",ephemeral:true})
 
 interaction.reply("✅ Partida assumida")
 
@@ -231,7 +192,7 @@ filas[id] = []
 
 const embed = new EmbedBuilder()
 .setTitle(`💰 Fila ${modo} | ${valor}`)
-.setDescription(`Jogadores: **0/2**`)
+.setDescription("Jogadores: **0/2**")
 .setColor("Green")
 
 const row = new ActionRowBuilder()
@@ -291,12 +252,10 @@ const embed = new EmbedBuilder()
 
 const row = new ActionRowBuilder()
 .addComponents(
-
 new ButtonBuilder()
-.setCustomId("assumir_partida")
+.setCustomId("assumir")
 .setLabel("ASSUMIR PARTIDA")
 .setStyle(ButtonStyle.Success)
-
 )
 
 canal.send({embeds:[embed],components:[row]})
@@ -305,18 +264,18 @@ canal.send({embeds:[embed],components:[row]})
 
 /* SACAR */
 
-client.on("messageCreate", message=>{
+client.on("messageCreate", msg=>{
 
-if(message.content === "!sacar"){
+if(msg.content === "!sacar"){
 
-const saldo = carteiras[message.author.id] || 0
+const saldo = carteiras[msg.author.id] || 0
 
 const embed = new EmbedBuilder()
 .setTitle("💰 Carteira")
 .setDescription(`Saldo: **${saldo} moedas**`)
 .setColor("Yellow")
 
-message.reply({embeds:[embed]})
+msg.reply({embeds:[embed]})
 
 }
 
