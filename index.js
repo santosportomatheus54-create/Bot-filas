@@ -1,207 +1,278 @@
 const {
-  Client,
-  GatewayIntentBits,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  EmbedBuilder,
-  ChannelType,
-  PermissionsBitField,
-  SlashCommandBuilder,
-  REST,
-  Routes
-} = require("discord.js");
-
-require("dotenv").config();
+Client,
+GatewayIntentBits,
+EmbedBuilder,
+ActionRowBuilder,
+ButtonBuilder,
+ButtonStyle,
+PermissionsBitField,
+SlashCommandBuilder
+} = require("discord.js")
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds]
-});
+intents:[
+GatewayIntentBits.Guilds,
+GatewayIntentBits.GuildMessages,
+GatewayIntentBits.MessageContent
+]
+})
 
-const valores = [100, 50, 20, 10, 5, 2, 1];
+const filas = {}
+const jogadoresFila = new Map()
+const carteiras = {}
+const valores = [100,50,20,10,5,2,1]
 
-const filas = {};
-const ranking = {};
-const saldo = {};
+client.once("ready", () =>{
+console.log(`Bot online: ${client.user.tag}`)
+})
 
-valores.forEach(v => {
-  filas[v] = {
-    normal: [],
-    inf: [],
-    full: [],
-    message: null
-  };
-});
+/* INTERAÇÕES */
 
-client.once("ready", async () => {
-  console.log(`🔥 Online como ${client.user.tag}`);
+client.on("interactionCreate", async interaction =>{
 
-  const commands = [
-    new SlashCommandBuilder()
-      .setName("fila")
-      .setDescription("Criar todas as filas automáticas")
-  ].map(c => c.toJSON());
+/* COMANDO /FILA */
 
-  const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
+if(interaction.isChatInputCommand()){
 
-  await rest.put(
-    Routes.applicationGuildCommands(
-      process.env.CLIENT_ID,
-      process.env.GUILD_ID
-    ),
-    { body: commands }
-  );
-});
+if(interaction.commandName === "fila"){
 
-client.on("interactionCreate", async interaction => {
+const embed = new EmbedBuilder()
+.setTitle("🎮 Escolha o modo")
+.setDescription("Selecione o modo da partida")
+.setColor("Blue")
 
-  // COMANDO /fila
-  if (interaction.isChatInputCommand()) {
-    if (interaction.commandName === "fila") {
+const row = new ActionRowBuilder()
+.addComponents(
 
-      await interaction.reply({
-        content: "🔥 Criando filas...",
-        ephemeral: true
-      });
+new ButtonBuilder()
+.setCustomId("modo_1v1")
+.setLabel("1v1")
+.setStyle(ButtonStyle.Primary),
 
-      for (let valor of valores) {
-        await criarFila(interaction.channel, valor);
-        await delay(2000);
-      }
-    }
-  }
+new ButtonBuilder()
+.setCustomId("modo_2v2")
+.setLabel("2v2")
+.setStyle(ButtonStyle.Primary),
 
-  // BOTÕES
-  if (interaction.isButton()) {
+new ButtonBuilder()
+.setCustomId("modo_3v3")
+.setLabel("3v3")
+.setStyle(ButtonStyle.Primary),
 
-    const [tipo, valor] = interaction.customId.split("_");
-    const userId = interaction.user.id;
-    const fila = filas[valor];
+new ButtonBuilder()
+.setCustomId("modo_4v4")
+.setLabel("4v4")
+.setStyle(ButtonStyle.Primary)
 
-    if (!fila) return;
+)
 
-    // SAIR
-    if (tipo === "sair") {
+interaction.reply({embeds:[embed],components:[row]})
 
-      fila.normal = fila.normal.filter(id => id !== userId);
-      fila.inf = fila.inf.filter(id => id !== userId);
-      fila.full = fila.full.filter(id => id !== userId);
-
-      await atualizarEmbed(valor);
-      return interaction.reply({ content: "🚪 Você saiu da fila!", ephemeral: true });
-    }
-
-    // ENTRAR
-    if (!fila[tipo].includes(userId)) {
-      fila[tipo].push(userId);
-    }
-
-    await interaction.reply({ content: "✅ Você entrou na fila!", ephemeral: true });
-
-    if (fila[tipo].length === 2) {
-      await criarPartida(interaction.guild, fila[tipo], valor, tipo);
-      fila[tipo] = [];
-    }
-
-    await atualizarEmbed(valor);
-  }
-});
-
-async function criarFila(channel, valor) {
-
-  const embed = new EmbedBuilder()
-    .setTitle(`💰 Fila ${valor}`)
-    .setColor("#ff6600")
-    .addFields(
-      { name: "🧊 Gel Normal", value: listar(filas[valor].normal) },
-      { name: "❄️ Gel Infinito", value: listar(filas[valor].inf) },
-      { name: "🎯 Full Capa", value: listar(filas[valor].full) }
-    )
-    .setFooter({ text: "Sistema automático de filas" });
-
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`normal_${valor}`)
-      .setLabel("🧊 Gel Normal")
-      .setStyle(ButtonStyle.Primary),
-
-    new ButtonBuilder()
-      .setCustomId(`inf_${valor}`)
-      .setLabel("❄️ Gel Inf")
-      .setStyle(ButtonStyle.Success),
-
-    new ButtonBuilder()
-      .setCustomId(`full_${valor}`)
-      .setLabel("🎯 Full Capa")
-      .setStyle(ButtonStyle.Danger),
-
-    new ButtonBuilder()
-      .setCustomId(`sair_${valor}`)
-      .setLabel("🚪 Sair")
-      .setStyle(ButtonStyle.Secondary)
-  );
-
-  const msg = await channel.send({
-    embeds: [embed],
-    components: [row]
-  });
-
-  filas[valor].message = msg;
 }
 
-function listar(array) {
-  if (array.length === 0) return "Nenhum jogador.";
-  return array.map(id => `<@${id}>`).join("\n");
+/* SETAR VENCEDOR */
+
+if(interaction.commandName === "vencedor"){
+
+if(!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator))
+return interaction.reply({content:"Apenas ADM",ephemeral:true})
+
+const user = interaction.options.getUser("player")
+const valor = interaction.options.getInteger("valor")
+
+if(!carteiras[user.id]) carteiras[user.id] = 0
+
+carteiras[user.id] += valor
+
+interaction.reply(`🏆 ${user} recebeu **${valor}** moedas`)
 }
 
-async function atualizarEmbed(valor) {
-
-  const fila = filas[valor];
-  if (!fila.message) return;
-
-  const embed = new EmbedBuilder()
-    .setTitle(`💰 Fila ${valor}`)
-    .setColor("#ff6600")
-    .addFields(
-      { name: "🧊 Gel Normal", value: listar(fila.normal) },
-      { name: "❄️ Gel Infinito", value: listar(fila.inf) },
-      { name: "🎯 Full Capa", value: listar(fila.full) }
-    )
-    .setFooter({ text: "Atualização automática" });
-
-  await fila.message.edit({ embeds: [embed] });
 }
 
-async function criarPartida(guild, players, valor, tipo) {
+/* BOTÕES */
 
-  const canal = await guild.channels.create({
-    name: `x1-${valor}-${tipo}`,
-    type: ChannelType.GuildText,
-    parent: process.env.CATEGORY_ID,
-    permissionOverwrites: [
-      {
-        id: guild.roles.everyone,
-        deny: [PermissionsBitField.Flags.ViewChannel]
-      },
-      ...players.map(id => ({
-        id: id,
-        allow: [PermissionsBitField.Flags.ViewChannel]
-      }))
-    ]
-  });
+if(interaction.isButton()){
 
-  canal.send(`🔥 Partida criada!\n\nValor: ${valor}\nModo: ${tipo}\n\nJogadores:\n${players.map(id => `<@${id}>`).join("\n")}`);
+const user = interaction.user
 
-  if (process.env.LOG_CHANNEL_ID) {
-    const log = guild.channels.cache.get(process.env.LOG_CHANNEL_ID);
-    if (log) {
-      log.send(`📢 Nova partida criada - ${valor} (${tipo})`);
-    }
-  }
+/* ESCOLHER MODO */
+
+if(interaction.customId.startsWith("modo_")){
+
+const modo = interaction.customId.split("_")[1]
+
+interaction.reply(`Modo escolhido: **${modo}**`)
+
+let delay = 0
+
+for(const valor of valores){
+
+setTimeout(()=>{
+
+criarFila(interaction.channel,valor,modo)
+
+},delay)
+
+delay += 2000
+
 }
 
-function delay(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-client.login(process.env.TOKEN);
+/* ENTRAR FILA */
+
+if(interaction.customId.startsWith("entrar")){
+
+if(jogadoresFila.has(user.id))
+return interaction.reply({content:"Você já está em uma fila",ephemeral:true})
+
+const id = interaction.customId.split("_")[1]
+
+filas[id].push(user.id)
+
+jogadoresFila.set(user.id,id)
+
+interaction.reply({content:"Entrou na fila",ephemeral:true})
+
+if(filas[id].length === 2){
+
+criarSala(interaction.guild,id)
+
+}
+
+}
+
+/* SAIR FILA */
+
+if(interaction.customId.startsWith("sair")){
+
+if(!jogadoresFila.has(user.id))
+return interaction.reply({content:"Você não está em fila",ephemeral:true})
+
+const id = jogadoresFila.get(user.id)
+
+filas[id] = filas[id].filter(x => x !== user.id)
+
+jogadoresFila.delete(user.id)
+
+interaction.reply({content:"Saiu da fila",ephemeral:true})
+
+}
+
+/* ASSUMIR PARTIDA */
+
+if(interaction.customId === "assumir_partida"){
+
+if(!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator))
+return interaction.reply({content:"Apenas ADM pode assumir",ephemeral:true})
+
+interaction.reply("✅ Partida assumida pelo ADM")
+
+}
+
+}
+
+})
+
+/* CRIAR FILA */
+
+async function criarFila(channel,valor,modo){
+
+const id = `${modo}_${valor}`
+
+filas[id] = []
+
+const embed = new EmbedBuilder()
+.setTitle(`💰 Fila ${modo} | ${valor}`)
+.setDescription(`Jogadores: **0/2**`)
+.setColor("Green")
+
+const row = new ActionRowBuilder()
+.addComponents(
+
+new ButtonBuilder()
+.setCustomId(`entrar_${id}`)
+.setLabel("🧊 Gelo Normal")
+.setStyle(ButtonStyle.Primary),
+
+new ButtonBuilder()
+.setCustomId(`entrar_${id}`)
+.setLabel("❄️ Gelo Infinito")
+.setStyle(ButtonStyle.Primary),
+
+new ButtonBuilder()
+.setCustomId(`entrar_${id}`)
+.setLabel("🎯 Full Capa")
+.setStyle(ButtonStyle.Primary),
+
+new ButtonBuilder()
+.setCustomId(`sair_${id}`)
+.setLabel("❌ Sair")
+.setStyle(ButtonStyle.Danger)
+
+)
+
+channel.send({embeds:[embed],components:[row]})
+
+}
+
+/* CRIAR SALA DA PARTIDA */
+
+async function criarSala(guild,id){
+
+const jogadores = filas[id]
+
+const canal = await guild.channels.create({
+name:`partida-${id}`,
+type:0,
+permissionOverwrites:[
+{
+id:guild.roles.everyone,
+deny:["ViewChannel"]
+},
+...jogadores.map(j=>({
+id:j,
+allow:["ViewChannel"]
+}))
+]
+})
+
+const embed = new EmbedBuilder()
+.setTitle("⚔️ Partida criada")
+.setDescription("Aguardando um ADM assumir a partida")
+.setColor("Red")
+
+const row = new ActionRowBuilder()
+.addComponents(
+
+new ButtonBuilder()
+.setCustomId("assumir_partida")
+.setLabel("ASSUMIR PARTIDA")
+.setStyle(ButtonStyle.Success)
+
+)
+
+canal.send({embeds:[embed],components:[row]})
+
+}
+
+/* COMANDO SACAR */
+
+client.on("messageCreate", message =>{
+
+if(message.content === "!sacar"){
+
+const saldo = carteiras[message.author.id] || 0
+
+const embed = new EmbedBuilder()
+.setTitle("💰 Carteira")
+.setDescription(`Seu saldo: **${saldo} moedas**`)
+.setColor("Yellow")
+
+message.reply({embeds:[embed]})
+
+}
+
+})
+
+client.login(process.env.TOKEN)
